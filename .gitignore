@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+.env
+.env.local
+
+# Excel temp files
+~$*.xlsx
+~$*.xlsm
+*.tmp
+
+# Output files
+output/
+*.bak
+
+# IDE
+.vscode/
+.idea/
+*.swp
