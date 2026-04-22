@@ -70,6 +70,7 @@ def run(service: str, source: str, template: str, output: str, month: str,
         src_name = mapping["source_sheet"]
         dst_name = mapping["dest_sheet"]
         data_start_row = mapping.get("data_start_row", mapping.get("header_rows", 1) + 1)
+        src_data_start_row = mapping.get("source_data_start_row")
         helper_cols = mapping.get("helper_columns") or {}
 
         if src_name not in wb_src.sheetnames:
@@ -82,7 +83,11 @@ def run(service: str, source: str, template: str, output: str, month: str,
         src_ws = wb_src[src_name]
         dst_ws = wb_out[dst_name]
         aggregates = mapping.get("aggregates") or []
-        rows = replace_sheet_data(src_ws, dst_ws, data_start_row, helper_cols, aggregates)
+        rows = replace_sheet_data(
+            src_ws, dst_ws, data_start_row, helper_cols, aggregates,
+            src_data_start_row=src_data_start_row,
+            clear_columns=mapping.get("clear_columns") or None,
+        )
         print(f"  '{src_name}' -> '{dst_name}': {rows} rows")
 
     # 4b. Sync プログラミング営業管理 from Google Sheet CSV (optional)
@@ -121,11 +126,15 @@ def run(service: str, source: str, template: str, output: str, month: str,
 
     # 6. New shop detection + manual add
     nsd = cfg.get("new_shop_detection", {})
+    # ``report_al_column`` can be set to ``null`` in YAML for reports that do
+    # not mirror family IDs to column AL (e.g. 将棋/文理/速読).
+    report_al_column = nsd.get("report_al_column", "AL")
     add_shops = add_shops or []
     if add_shops:
         print(f"\n[Extra] Adding user-specified shops: {add_shops}")
         rows_used = append_family_ids_to_report(
             report_ws, add_shops,
+            al_column=report_al_column,
             data_start_row=nsd.get("report_data_start_row", 11),
         )
         print(f"  Appended {len(rows_used)} rows to 報告書: {rows_used}")
@@ -146,6 +155,7 @@ def run(service: str, source: str, template: str, output: str, month: str,
             if auto_append:
                 rows_used = append_family_ids_to_report(
                     report_ws, new_ids,
+                    al_column=report_al_column,
                     data_start_row=nsd["report_data_start_row"],
                 )
                 print(f"  Appended to 報告書 rows: {rows_used}")

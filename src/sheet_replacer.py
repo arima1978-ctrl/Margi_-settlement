@@ -26,10 +26,15 @@ def copy_data_rows(
     dst_ws: Worksheet,
     data_start_row: int,
     columns_to_copy: list[str] | None = None,
+    src_data_start_row: int | None = None,
 ) -> int:
     """Copy data rows from src to dst (values only, no formulas).
 
     Returns the number of data rows copied.
+
+    If ``src_data_start_row`` is None it defaults to ``data_start_row``.
+    Specify it separately when the source and destination have different
+    header heights (e.g. sokudoku: src data starts at row 3, dst at row 4).
     """
     if columns_to_copy is None:
         # Copy all columns from src
@@ -38,8 +43,11 @@ def copy_data_rows(
     else:
         col_indices = [column_letter_to_index(c) for c in columns_to_copy]
 
+    if src_data_start_row is None:
+        src_data_start_row = data_start_row
+
     rows_copied = 0
-    for src_row_idx in range(data_start_row, src_ws.max_row + 1):
+    for src_row_idx in range(src_data_start_row, src_ws.max_row + 1):
         # Read source row values (resolve formulas by taking cached value)
         has_data = False
         values = {}
@@ -167,8 +175,14 @@ def replace_sheet_data(
     data_start_row: int,
     helper_columns: dict[str, str],
     aggregates: list[dict] | None = None,
+    src_data_start_row: int | None = None,
+    clear_columns: list[str] | None = None,
 ) -> int:
     """Replace destination sheet's data rows with source's data, values-only.
+
+    ``clear_columns`` drops garbage that leaks in via the raw row copy from
+    source sheets that contain helper formulas (COUNTIF/"OK" etc.) in columns
+    the settlement template keeps blank.
 
     Returns the number of rows copied.
     """
@@ -176,12 +190,18 @@ def replace_sheet_data(
     clear_data_rows(dst_ws, data_start_row)
 
     # 2. Copy data from source (values only)
-    rows_copied = copy_data_rows(src_ws, dst_ws, data_start_row)
+    rows_copied = copy_data_rows(
+        src_ws, dst_ws, data_start_row, src_data_start_row=src_data_start_row
+    )
 
     # 3. Apply helper columns
     apply_helper_columns(dst_ws, data_start_row, rows_copied, helper_columns)
 
     # 4. Apply aggregates (deduplication + sum) — used by 報告書 VLOOKUPs
     apply_aggregates(dst_ws, data_start_row, rows_copied, aggregates or [])
+
+    # 5. Clear explicitly-configured garbage columns
+    for col_letter in clear_columns or []:
+        clear_column_range(dst_ws, col_letter, data_start_row)
 
     return rows_copied

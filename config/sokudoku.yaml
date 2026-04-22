@@ -1,0 +1,47 @@
+# 100万人の速読清算書の設定
+#
+# 注意: source の 速読ID利用料 は header 2 行 (data row 3 から)、
+#       清算書側は header 3 行 (data row 4 から) の構成。
+#       source_data_start_row で吸収する。
+service: sokudoku
+
+report_sheet: 報告書
+month_cell: D1
+manual_cells: []
+
+sheet_replacements:
+  # 保護者情報
+  - source_sheet: 保護者情報DL貼付⑩AKへ
+    dest_sheet: 保護者情報DL貼付⑩AKへ
+    header_rows: 1
+    helper_columns: {}
+
+  # 速読ID利用料: 報告書
+  #   K列 = VLOOKUP(..., 速読ID利用料!$O:$P, 2, 0) → 料金合計 (集約)
+  #   M列 = VLOOKUP(..., 速読ID利用料!$O:$R, 4, 0) → 生徒数 (MID抽出)
+  # helper R = 項目テキストから「円×N名分」の N を抽出
+  - source_sheet: 速読ID利用料
+    dest_sheet: 速読ID利用料
+    header_rows: 3
+    data_start_row: 4
+    source_data_start_row: 3
+    helper_columns:
+      L: "=C{row}"
+      M: "=H{row}"
+      R: '=VALUE(MID(F{row},FIND("円×",F{row})+2,FIND("名分",F{row})-FIND("円×",F{row})-2))'
+    aggregates:
+      - dst_col_id: O
+        dst_col_sum: P
+        src_col_id: C
+        src_col_sum: H
+
+new_shop_detection:
+  enabled: true
+  auto_append_to_report: false
+
+  source_category_sheets:
+    - 速読ID利用料
+
+  report_family_id_column: B
+  report_data_start_row: 6
+  report_al_column: null

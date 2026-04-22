@@ -1,0 +1,140 @@
+# 文理ヴィクトリー清算書の設定
+#
+# 注意: source 側は「文理ビクトリー」(ヴ無し) が多く、
+#       清算書側は混在する。各 mapping の source/dest で吸収する。
+#
+# 各カテゴリーシートの清算書には r3 に「例」行(B='例', C=999999)があり、
+# データ行は r4 から始まる。source 側のデータ開始行は sheet によって r3/r4 と異なるので、
+# source_data_start_row で吸収する。
+service: bunri
+
+report_sheet: 報告書
+month_cell: D1
+manual_cells: []
+
+sheet_replacements:
+  # 保護者情報
+  - source_sheet: 保護者情報DL貼付⑩AKへ
+    dest_sheet: 保護者情報DL貼付⑩AKへ
+    header_rows: 1
+    helper_columns: {}
+
+  # 基本料金 (src/dst 同名、ヴ無し)
+  # 報告書 L列 = VLOOKUP(..., !$C:$R, 6, 0) → col H 料金の最初のマッチを返す (集約不要だが O/P を慣例で集約)
+  # helper: A=COUNTIF, L/M=C/H; aggregate O/P from C/H
+  - source_sheet: 文理ビクトリー_基本料金
+    dest_sheet: 文理ビクトリー_基本料金
+    header_rows: 3
+    data_start_row: 4
+    source_data_start_row: 4  # src r3 はラベル行なのでスキップ
+    helper_columns:
+      A: "=COUNTIF($C:$C,C{row})"
+      L: "=C{row}"
+      M: "=H{row}"
+    aggregates:
+      - dst_col_id: O
+        dst_col_sum: P
+        src_col_id: C
+        src_col_sum: H
+
+  # 初期費用 (src=文理ビクトリー初期費用 → dst=文理ヴィクトリー初期費用, ヴ追加)
+  # 報告書 K列 = VLOOKUP(..., !$U:$V, 2, 0) → aggregate U/V
+  # helper: A=COUNTIF, R/S=C/H (L/M は使わない); aggregate U/V from C/H
+  - source_sheet: 文理ビクトリー初期費用
+    dest_sheet: 文理ヴィクトリー初期費用
+    header_rows: 3
+    data_start_row: 4
+    source_data_start_row: 4  # src r3 はラベル行なのでスキップ
+    helper_columns:
+      A: "=COUNTIF($C:$C,C{row})"
+      R: "=C{row}"
+      S: "=H{row}"
+    aggregates:
+      - dst_col_id: U
+        dst_col_sum: V
+        src_col_id: C
+        src_col_sum: H
+
+  # 生徒ID料 (src=④文理ビクトリー利用料 → dst=文理_生徒)
+  # src header 2行/data r3から、dst header 2行+例行r3/data r4から
+  # 報告書 M列 = VLOOKUP(..., 文理_生徒!$U:$V, 2, 0)
+  # helper: R/S=C/H; aggregate U/V; src の T/U/V/W には COUNTIF ゴミ → clear T/W (U/V は aggregate が上書き)
+  - source_sheet: ④文理ビクトリー利用料
+    dest_sheet: 文理_生徒
+    header_rows: 3
+    data_start_row: 4
+    source_data_start_row: 3
+    helper_columns:
+      R: "=C{row}"
+      S: "=H{row}"
+    aggregates:
+      - dst_col_id: U
+        dst_col_sum: V
+        src_col_id: C
+        src_col_sum: H
+    clear_columns: [T, W]
+
+  # オンライン個別チケット (src=④文理ビクトリーチケット → dst=文理V_オンライン個別)
+  - source_sheet: ④文理ビクトリーチケット
+    dest_sheet: 文理V_オンライン個別
+    header_rows: 3
+    data_start_row: 4
+    source_data_start_row: 3
+    helper_columns:
+      R: "=C{row}"
+      S: "=H{row}"
+    aggregates:
+      - dst_col_id: U
+        dst_col_sum: V
+        src_col_id: C
+        src_col_sum: H
+    clear_columns: [T, W]
+
+  # 有料講座 (src=④文理ビクトリー有料講座 → dst=文理ヴィクトリー有料講座, ヴ追加)
+  # source の r3 は COUNTIF ゴミのみで C/H 共に空なので、r4 からコピー開始
+  - source_sheet: ④文理ビクトリー有料講座
+    dest_sheet: 文理ヴィクトリー有料講座
+    header_rows: 3
+    data_start_row: 4
+    source_data_start_row: 4
+    helper_columns:
+      R: "=C{row}"
+      S: "=H{row}"
+    aggregates:
+      - dst_col_id: U
+        dst_col_sum: V
+        src_col_id: C
+        src_col_sum: H
+    clear_columns: [T, W]
+
+  # おまかせコース (src=④文理おまかせコース → dst=文理おまかせコース, ④除去)
+  - source_sheet: ④文理おまかせコース
+    dest_sheet: 文理おまかせコース
+    header_rows: 3
+    data_start_row: 4
+    source_data_start_row: 3
+    helper_columns:
+      R: "=C{row}"
+      S: "=H{row}"
+    aggregates:
+      - dst_col_id: U
+        dst_col_sum: V
+        src_col_id: C
+        src_col_sum: H
+    clear_columns: [T, W]
+
+new_shop_detection:
+  enabled: true
+  auto_append_to_report: false
+
+  source_category_sheets:
+    - ④文理ビクトリー利用料
+    - ④文理ビクトリー有料講座
+    - ④文理おまかせコース
+    - ④文理ビクトリーチケット
+    - 文理ビクトリー初期費用
+    - 文理ビクトリー_基本料金
+
+  report_family_id_column: B
+  report_data_start_row: 6
+  report_al_column: null

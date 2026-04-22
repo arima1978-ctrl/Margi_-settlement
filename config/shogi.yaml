@@ -1,0 +1,69 @@
+# スマイル将棋清算書の設定
+service: shogi
+
+report_sheet: 報告書
+month_cell: D1
+manual_cells: []
+
+# source .xlsm → 清算書シートの貼り替え対応表
+sheet_replacements:
+  # 保護者情報（プログラミングと共通）
+  - source_sheet: 保護者情報DL貼付⑩AKへ
+    dest_sheet: 保護者情報DL貼付⑩AKへ
+    header_rows: 1
+    helper_columns: {}
+
+  # 生徒ID: 報告書 L列が VLOOKUP(..., ④_4スマイル将棋_生徒ID!$T:$U, 2, 0) を参照。
+  # L列は「仕入れ額(WAKA売上)」で、src の M列(納入価合計) を家族ID毎に集約する。
+  # 料金(H) ではなく M を集約しないと WAKA 仕入れ額と合わない。
+  # source の V/W 列には COUNTIF/"OK" のゴミ式が残っているため、清算書側では空欄に統一する。
+  - source_sheet: ④スマイル将棋_生徒ID
+    dest_sheet: ④_4スマイル将棋_生徒ID
+    header_rows: 2
+    data_start_row: 3
+    helper_columns: {}
+    aggregates:
+      - dst_col_id: T
+        dst_col_sum: U
+        src_col_id: C
+        src_col_sum: M
+    clear_columns: [V, W]
+
+  # 入会金: 報告書 O列は直接 $C:$H の料金列を参照するので集約不要
+  - source_sheet: ④スマイル将棋_入会金
+    dest_sheet: ④スマイル将棋_入会金
+    header_rows: 2
+    data_start_row: 3
+    helper_columns: {}
+
+  # 管理者ID: 報告書 N列が VLOOKUP(..., ④スマイル将棋管理者ＩＤ!$O:$P, 2, 0)
+  # を参照するため、家族ID重複を O/P 列に集約する。
+  # 既存ファイルの L/M ヘルパー(=C{row}/=H{row})も踏襲する。
+  - source_sheet: ④スマイル将棋管理者ＩＤ
+    dest_sheet: ④スマイル将棋管理者ＩＤ
+    header_rows: 2
+    data_start_row: 3
+    helper_columns:
+      L: "=C{row}"
+      M: "=H{row}"
+    aggregates:
+      - dst_col_id: O
+        dst_col_sum: P
+        src_col_id: C
+        src_col_sum: H
+
+# 新規塾検出（プログラミングと違って報告書のAL列は未使用）
+new_shop_detection:
+  enabled: true
+  auto_append_to_report: false
+
+  # 将棋実績のある家族IDを集計するソース側のカテゴリシート
+  source_category_sheets:
+    - ④スマイル将棋_生徒ID
+    - ④スマイル将棋_入会金
+    - ④スマイル将棋管理者ＩＤ
+
+  report_family_id_column: B
+  report_data_start_row: 6
+  # 報告書にAL列のミラーが無いので None を指定
+  report_al_column: null
