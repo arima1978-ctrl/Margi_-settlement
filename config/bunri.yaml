@@ -188,3 +188,15 @@ sales_master_sync:
     29: AD  # 教室長PW(初期)
     30: AE  # 招待メール送信日
     31: AF  # ﾓﾆﾀｰ終了日
+
+# お問い合わせリストで「追客状況=契約」となっている塾を報告書に自動追加。
+# sales_master_sync で同期された直後に実行され、報告書 B列に未登録の契約塾を
+# find_first_empty_row の直後から順に追加する。
+contract_shop_sync:
+  enabled: true
+  sheet: 文理ヴィクトリーお問い合わせリスト
+  id_column: D           # 塾ID の列
+  status_column: L       # 追客状況 の列
+  status_value: 契約      # この値のときだけ対象
+  data_start_row: 2      # お問い合わせリストの1行目はヘッダー
+  append_to_report: true # 報告書 B列への自動追加を有効化

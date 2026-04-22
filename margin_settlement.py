@@ -10,6 +10,10 @@ from pathlib import Path
 import openpyxl
 import yaml
 
+from src.contract_shop_detector import (
+    detect_contract_shops,
+    filter_missing_from_report,
+)
 from src.new_shop_detector import detect_new_family_ids
 from src.report_updater import append_family_ids_to_report, update_month_cell
 from src.sales_master_sync import fetch_csv, sync_sales_management
@@ -185,6 +189,39 @@ def run(service: str, source: str, template: str, output: str, month: str,
                     print("       Continuing without sales management population.")
         else:
             print("  No new family IDs detected.")
+
+    # 6b. Contract shop sync: auto-append 契約 shops from the master お問い合わせ
+    # リスト to the report. Runs after sales_master_sync so the synced sheet is
+    # available. Used by bunri; programming uses the ④-sheet detector instead.
+    css = cfg.get("contract_shop_sync", {})
+    if css.get("enabled"):
+        master_sheet = css["sheet"]
+        if master_sheet not in wb_out.sheetnames:
+            print(f"\n[Extra] contract_shop_sync: master sheet '{master_sheet}' not found, skipping")
+        else:
+            print(f"\n[Extra] Detecting contract shops from '{master_sheet}'...")
+            contract_ids = detect_contract_shops(
+                master_ws=wb_out[master_sheet],
+                id_column=css["id_column"],
+                status_column=css["status_column"],
+                status_value=css["status_value"],
+                data_start_row=css["data_start_row"],
+            )
+            missing = filter_missing_from_report(
+                ids=contract_ids,
+                report_ws=report_ws,
+                report_id_column=nsd.get("report_family_id_column", "B"),
+                report_data_start_row=nsd.get("report_data_start_row", 11),
+            )
+            print(f"  {len(contract_ids)} contract shops in master, "
+                  f"{len(missing)} missing from 報告書: {missing}")
+            if missing and css.get("append_to_report", True):
+                rows_used = append_family_ids_to_report(
+                    report_ws, missing,
+                    al_column=report_al_column,
+                    data_start_row=nsd.get("report_data_start_row", 11),
+                )
+                print(f"  Appended {len(rows_used)} rows to 報告書 B列: {rows_used}")
 
     # 7. Mark for full recalc when Excel opens the file
     wb_out.calculation.fullCalcOnLoad = True
