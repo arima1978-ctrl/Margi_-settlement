@@ -167,16 +167,21 @@ def run_job(job: Job, notify: bool) -> None:
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request, user: str = Depends(authenticate)):
-    # Most recent files per service for the file list
+    # Most recent files per service for the file list.
+    # Starlette >= 0.47 requires request as first positional arg; passing it
+    # via context dict is deprecated.
     files = list_recent_files(limit_per_service=5)
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "user": user,
-        "services": list(SERVICE_FOLDERS.keys()),
-        "base_dir": str(BASE_DIR),
-        "files": files,
-        "default_month": datetime.now().strftime("%Y-%m"),
-    })
+    return templates.TemplateResponse(
+        request,
+        "index.html",
+        {
+            "user": user,
+            "services": list(SERVICE_FOLDERS.keys()),
+            "base_dir": str(BASE_DIR),
+            "files": files,
+            "default_month": datetime.now().strftime("%Y-%m"),
+        },
+    )
 
 
 @app.post("/run")
