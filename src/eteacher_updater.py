@@ -73,6 +73,7 @@ class ShopSales:
     name: str = ""             # 塾名 (from 保護者情報 B列)
     tel: str = ""              # 電話番号 (保護者情報 H列)
     addr: str = ""             # 住所 (保護者情報 G列)
+    rep: str = ""              # 代表者 (らくらく ユーザー基本情報 G列)
 
 
 def _build_hogosha_info_lookup(wb: openpyxl.Workbook) -> dict[int, tuple[str, str, str]]:
@@ -125,6 +126,52 @@ def normalize_addr(s: Any) -> str:
     return re.sub(r"[\s　]", "", str(s))
 
 
+# Common corporate prefixes to strip when computing a canonical shop name.
+_CORPORATE_PREFIXES = (
+    "株式会社", "(株)", "(株)", "（株）",
+    "有限会社", "(有)", "(有)", "（有）",
+    "合同会社", "(合)", "(合)", "（合）",
+    "学校法人",
+    "特定非営利活動法人",
+)
+
+
+def normalize_shop_name(s: Any) -> str:
+    """Strip 法人格 prefix/suffix and spaces for fuzzy shop-name matching.
+
+    e.g. "(株)アール塾" and "アール塾" become the same canonical form.
+    """
+    if not s:
+        return ""
+    n = str(s).strip()
+    for token in _CORPORATE_PREFIXES:
+        n = n.replace(token, "")
+    n = re.sub(r"[\s　]", "", n)
+    return n
+
+
+def _build_rakuraku_rep_lookup(wb: openpyxl.Workbook) -> dict[int, str]:
+    """Build 家族ID -> 代表者 from らくらく ユーザー基本情報 G列."""
+    sheet_name = "らくらく　ユーザー基本情報貼り付ける"
+    if sheet_name not in wb.sheetnames:
+        return {}
+    ws = wb[sheet_name]
+    out: dict[int, str] = {}
+    for row in ws.iter_rows(min_row=2, max_col=7, values_only=True):
+        raw_fid = row[0]
+        g = row[6] if len(row) > 6 else None
+        if raw_fid is None or not g:
+            continue
+        try:
+            fid = int(raw_fid)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(g, str) and g.strip():
+            # Collapse multiple spaces to keep display tidy
+            out[fid] = re.sub(r"\s+", " ", g.strip())
+    return out
+
+
 def compute_shops_with_sales(xlsm_path: str | Path) -> list[ShopSales]:
     """Return a list of ShopSales (one per unique family_id).
 
@@ -139,6 +186,7 @@ def compute_shops_with_sales(xlsm_path: str | Path) -> list[ShopSales]:
     riyo = _build_family_amount_lookup(wb, "⑤Edu　ID利用料")
     kaiyaku = _build_family_amount_lookup(wb, "⑥-3 Edu解約塾")
     hogosha = _build_hogosha_info_lookup(wb)
+    rep_lookup = _build_rakuraku_rep_lookup(wb)
 
     ws = wb["マージン計算用"]
     seen: set[int] = set()
@@ -162,6 +210,7 @@ def compute_shops_with_sales(xlsm_path: str | Path) -> list[ShopSales]:
 
         tel = hogosha.get(fid, ("", "", ""))[1]
         addr = hogosha.get(fid, ("", "", ""))[2]
+        rep = rep_lookup.get(fid, "")
 
         base = (
             shoki.get(fid, 0.0)
@@ -171,7 +220,7 @@ def compute_shops_with_sales(xlsm_path: str | Path) -> list[ShopSales]:
         )
         t = _roundown_toward_zero(base * 1.1)
         out.append(ShopSales(family_id=fid, sales=t, base=base,
-                             name=name or "", tel=tel, addr=addr))
+                             name=name or "", tel=tel, addr=addr, rep=rep))
 
     wb.close()
     return out
@@ -232,10 +281,16 @@ _COL_MONTH_HEADER_ROW = 7  # r7 has 入金日/売上額 pattern
 def _match_shop(name: str, tel: str, addr: str,
                 shops_by_name: dict[str, ShopSales],
                 shops_by_tel: dict[str, ShopSales],
+                shops_by_canon_name: dict[str, ShopSales],
                 shops: list[ShopSales]) -> tuple[ShopSales | None, str]:
-    """Try 3-stage matching: 塾名 exact → TEL 正規化一致 → 住所 prefix 一致.
+    """Try 4-stage matching and return (shop, method).
 
-    Returns (shop, method) where method is 'name' / 'tel' / 'addr' / ''.
+    1. 塾名 exact         (method='name')
+    2. TEL 正規化一致     (method='tel')
+    3. 住所 prefix 一致   (method='addr')
+    4. 塾名 部分一致       (method='name_partial')
+       - canonical form: strip 法人格 prefix + spaces, then compare
+       - also tries substring containment (eteacher ⊂ source or逆)
     """
     key = (name or "").strip()
     if key and key in shops_by_name:
@@ -251,9 +306,23 @@ def _match_shop(name: str, tel: str, addr: str,
             sa = normalize_addr(s.addr)
             if not sa:
                 continue
-            # eteacher 短縮住所 ⊂ 保護者情報 全住所 ( or 逆 ) のどちらかで一致
             if sa.startswith(a_norm) or a_norm.startswith(sa):
                 return s, "addr"
+
+    # Fuzzy: normalized canonical name equality
+    n_canon = normalize_shop_name(key)
+    if n_canon and n_canon in shops_by_canon_name:
+        return shops_by_canon_name[n_canon], "name_partial"
+
+    # Fuzzy: substring containment on canonical form, min 4 chars to avoid
+    # '塾' alone colliding everywhere.
+    if n_canon and len(n_canon) >= 4:
+        for s in shops:
+            s_canon = normalize_shop_name(s.name)
+            if not s_canon or len(s_canon) < 4:
+                continue
+            if n_canon in s_canon or s_canon in n_canon:
+                return s, "name_partial"
 
     return None, ""
 
@@ -284,6 +353,11 @@ def update_eteacher(
         t = normalize_tel(s.tel)
         if t:
             shops_by_tel.setdefault(t, s)
+    shops_by_canon_name: dict[str, ShopSales] = {}
+    for s in shops:
+        c = normalize_shop_name(s.name)
+        if c:
+            shops_by_canon_name.setdefault(c, s)
 
     # Snapshot each eteacher row's 塾名/TEL/住所 BEFORE inserting the column.
     # The snapshot lets matching operate on stable column indices.
@@ -316,9 +390,23 @@ def update_eteacher(
     ws.cell(row=_COL_MONTH_HEADER_ROW, column=new_month_date_col).value = "入金日"
     ws.cell(row=_COL_MONTH_HEADER_ROW, column=new_month_sales_col).value = "売上額"
 
+    # Reference columns: show the matched shop's source-side data so the
+    # operator can eyeball whether the match is correct.
+    ref_addr_col = new_month_sales_col + 1      # AP (or AO if no insert)
+    ref_tel_col = new_month_sales_col + 2       # AQ
+    ref_rep_col = new_month_sales_col + 3       # AR
+    ref_method_col = new_month_sales_col + 4    # AS
+    ws.cell(row=_COL_HEADER_ROW, column=ref_addr_col).value = "参照住所"
+    ws.cell(row=_COL_HEADER_ROW, column=ref_tel_col).value = "参照TEL"
+    ws.cell(row=_COL_HEADER_ROW, column=ref_rep_col).value = "参照代表者"
+    ws.cell(row=_COL_HEADER_ROW, column=ref_method_col).value = "照合方法"
+
     matched_family_ids: set[int] = set()
     for row_idx, (name, tel, addr) in row_info.items():
-        shop, method = _match_shop(name, tel, addr, shops_by_name, shops_by_tel, shops)
+        shop, method = _match_shop(
+            name, tel, addr,
+            shops_by_name, shops_by_tel, shops_by_canon_name, shops,
+        )
         if shop is None:
             result.unmatched_in_eteacher.append(name)
             continue
@@ -327,6 +415,12 @@ def update_eteacher(
             ws.cell(row=row_idx, column=family_id_col).value = shop.family_id
         if shop.sales != 0:
             ws.cell(row=row_idx, column=new_month_sales_col).value = shop.sales
+
+        # Reference info (always populated for matched rows)
+        ws.cell(row=row_idx, column=ref_addr_col).value = shop.addr or None
+        ws.cell(row=row_idx, column=ref_tel_col).value = shop.tel or None
+        ws.cell(row=row_idx, column=ref_rep_col).value = shop.rep or None
+        ws.cell(row=row_idx, column=ref_method_col).value = method
 
         matched_family_ids.add(shop.family_id)
         result.matched.append((name, shop.family_id, shop.sales, method))
