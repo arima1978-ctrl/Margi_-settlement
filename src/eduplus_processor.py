@@ -36,11 +36,15 @@ import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
 
 
-EDUPLUS_SOURCE_SHEETS: tuple[str, ...] = (
-    "⑤Edu　ID利用料",
-    "⑥Edu　基本料金DLデータ",
-    "⑥-2 Edu初期費用　",
-    "⑥-3 Edu解約塾",
+# Each source sheet starts its data at a different row: ⑤ has two header
+# rows (r3/r4) so data starts at r5, while ⑥/⑥-2/⑥-3 only have one header
+# (r3) and real data begins at r4. Missing this nuance silently dropped
+# three families (100333, 101301, 101725) on the first implementation.
+EDUPLUS_SOURCE_SHEETS: tuple[tuple[str, int], ...] = (
+    ("⑤Edu　ID利用料",          5),
+    ("⑥Edu　基本料金DLデータ",  4),
+    ("⑥-2 Edu初期費用　",       4),
+    ("⑥-3 Edu解約塾",            4),
 )
 
 SHUGO_SHEET = "学書マージン清算書用シート"
@@ -53,7 +57,6 @@ COL_N = 14   # 学書ID (aggregation output)
 COL_O = 15   # 学書料金 (aggregation output)
 
 SHUGO_DATA_START = 7        # 学書マージン清算書用シート データ行開始
-SOURCE_DATA_START = 5       # 各 source シート のデータ行開始
 MARGIN_KEISAN_ID_COL = 5    # E列 = 家族ID
 
 
@@ -75,7 +78,7 @@ class EduplusResult:
     margin_keisan_append_from_row: int | None = None
 
 
-def aggregate_source_sheet(ws: Worksheet, data_start_row: int = SOURCE_DATA_START
+def aggregate_source_sheet(ws: Worksheet, data_start_row: int = 5
                            ) -> tuple[list[tuple[int, float]], int]:
     """Aggregate C/H into unique (family_id, summed_amount) written to N/O.
 
@@ -128,9 +131,14 @@ def _as_int_if_whole(v: float) -> int | float:
 def write_shugo_sheet(ws: Worksheet, all_pairs: list[tuple[int, float]]) -> tuple[int, list[tuple[int, float]]]:
     """Populate A/B with concatenated pairs and D/E with deduplicated pairs.
 
-    Returns (rows_written_to_AB, deduped_pairs_in_D_E).
+    Returns (rows_written_to_AB, deduped_pairs_in_D_E). The existing totals
+    formulas in E4 (=SUM(E7:E1391)) and E5 (=E4*1.08) are preserved so
+    cached totals shown at the top of the sheet stay in sync after a
+    recalc. Only the data rows (r7 onward) are cleared before writing.
     """
-    # Clear A, B, D, E, G, H from SHUGO_DATA_START down to max_row
+    # Clear A, B, D, E, G, H from SHUGO_DATA_START down to max_row.
+    # Rows above SHUGO_DATA_START contain title/header and the SUM totals
+    # (E4/E5), which must be left untouched.
     for row in range(SHUGO_DATA_START, ws.max_row + 1):
         for col in (1, 2, 4, 5, 7, 8):
             ws.cell(row=row, column=col).value = None
@@ -220,11 +228,11 @@ def process_eduplus(source_path: str | Path, *, backup: bool = True) -> EduplusR
     wb = openpyxl.load_workbook(path, keep_vba=True)
 
     all_pairs: list[tuple[int, float]] = []
-    for sheet_name in EDUPLUS_SOURCE_SHEETS:
+    for sheet_name, start_row in EDUPLUS_SOURCE_SHEETS:
         if sheet_name not in wb.sheetnames:
             result.sheets.append(SheetResult(name=sheet_name, found=False))
             continue
-        pairs, scanned = aggregate_source_sheet(wb[sheet_name])
+        pairs, scanned = aggregate_source_sheet(wb[sheet_name], data_start_row=start_row)
         all_pairs.extend(pairs)
         result.sheets.append(SheetResult(
             name=sheet_name, found=True,
