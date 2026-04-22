@@ -1,0 +1,23 @@
+[Unit]
+Description=margin-settlement web UI (FastAPI + uvicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=skyuser
+Group=skyuser
+WorkingDirectory=/home/skyuser/margin-settlement
+# .env が同ディレクトリに配置されている前提。WEB_BASIC_AUTH_USERS と
+# TELEGRAM_* を含む。systemd 用の EnvironmentFile として読ませる場合は
+# 下の EnvironmentFile 行を有効化する。
+# EnvironmentFile=/home/skyuser/margin-settlement/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONIOENCODING=utf-8
+ExecStart=/home/skyuser/margin-settlement/.venv/bin/python /home/skyuser/margin-settlement/web/app.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

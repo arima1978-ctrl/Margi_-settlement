@@ -1,0 +1,18 @@
+# margin-settlement 月次自動実行 (skyuser 用)
+#
+# 毎月1日 09:00 JST に実行。 Telegram 通知を有効化。
+# 対象月は実行日の「翌月」にあたる前月分を生成 (run_monthly.py のデフォルト)
+# ではなく、**今月分** を指定する必要がある。1日時点で先月は締まっているので。
+#
+# 例: 2026-05-01 09:00 実行 → --month 2026-05 (5月分) を生成。
+#     前月送信分 (2026-04-18 頃の .xlsm) をソースに使う。
+#
+# cron の環境変数は最小限なので PATH と PYTHONUNBUFFERED/PYTHONIOENCODING を明示。
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+PYTHONUNBUFFERED=1
+PYTHONIOENCODING=utf-8
+
+# sec  min  hour  day  mon  dow
+0 9 1 * * cd /home/skyuser/margin-settlement && /home/skyuser/margin-settlement/.venv/bin/python scripts/run_monthly.py --yes --notify --month $(date +\%Y-\%m) >> /home/skyuser/margin-settlement/logs/cron-$(date +\%Y\%m).log 2>&1

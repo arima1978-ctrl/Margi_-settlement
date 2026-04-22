@@ -3,3 +3,8 @@ gspread>=6.0.0
 google-auth>=2.0.0
 python-dateutil>=2.8.0
 PyYAML>=6.0
+# Web UI (scripts/web_app.py) deps
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+jinja2>=3.1.0
+python-multipart>=0.0.9
