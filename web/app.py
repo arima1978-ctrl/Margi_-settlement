@@ -51,6 +51,11 @@ SERVICE_FOLDERS = {
     "sokudoku":    "１００万人の速読　清算書",
 }
 
+# eduplus は在来4サービスと違い、源泉 .xlsm を in-place で書き換えるだけで
+# ダウンロード可能な新ファイルは生成しない。SERVICE_CHOICES として扱うが
+# ファイル一覧 (SERVICE_FOLDERS) からは除外する。
+SERVICE_CHOICES: list[str] = list(SERVICE_FOLDERS.keys()) + ["eduplus"]
+
 app = FastAPI(title="margin-settlement web UI")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
@@ -176,7 +181,7 @@ def index(request: Request, user: str = Depends(authenticate)):
         "index.html",
         {
             "user": user,
-            "services": list(SERVICE_FOLDERS.keys()),
+            "services": SERVICE_CHOICES,
             "base_dir": str(BASE_DIR),
             "files": files,
             "default_month": datetime.now().strftime("%Y-%m"),
@@ -191,7 +196,7 @@ async def start_run(
 ) -> JSONResponse:
     form = await request.form()
     month = str(form.get("month", "")).strip()
-    services = [s for s in form.getlist("services") if s in SERVICE_FOLDERS]
+    services = [s for s in form.getlist("services") if s in SERVICE_CHOICES]
     notify = form.get("notify") in ("on", "true", "1")
     if not month or len(month) != 7 or month[4] != "-":
         raise HTTPException(status_code=400, detail="month must be YYYY-MM")

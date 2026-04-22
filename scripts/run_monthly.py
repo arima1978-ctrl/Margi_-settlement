@@ -31,6 +31,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from margin_settlement import run as run_service
+from src.eduplus_processor import format_summary as format_eduplus_summary, process_eduplus
 from src.notifier import format_run_summary, load_dotenv, send_telegram
 
 # Load .env early so MARGIN_BASE_DIR is respected when the module-level
@@ -44,19 +45,24 @@ BASE_DIR = Path(os.environ.get("MARGIN_BASE_DIR") or _DEFAULT_BASE)
 SOURCE_BACKUP_DIR = BASE_DIR / "【業者請求書】エクセルbackup"
 
 
+# kind:
+#   "template_based": 前月テンプレを複製して当月分清算書を生成 (programming 等4つ)
+#   "in_place_eduplus": 源泉 .xlsm を直接書き換え (eduplus 集計)
 @dataclass(frozen=True)
 class ServiceSpec:
-    service: str          # CLI id (programming / shogi / bunri / sokudoku)
-    folder: str           # 清算書フォルダ名
-    prefix: str           # ファイル名の先頭 (例: "プログラミング売上管理表_")
+    service: str
+    kind: str = "template_based"
+    folder: str = ""                 # template_based のみ使う
+    prefix: str = ""                 # template_based のみ使う
     suffix: str = "月分.xlsx"
 
 
 SERVICES: list[ServiceSpec] = [
-    ServiceSpec("programming", "プログラミング清算書",        "プログラミング売上管理表_"),
-    ServiceSpec("shogi",       "スマイル将棋清算書",          "スマイル将棋売上管理表_"),
-    ServiceSpec("bunri",       "文理ヴィクトリー清算書",      "文理ヴィクトリー売上管理表_"),
-    ServiceSpec("sokudoku",    "１００万人の速読　清算書",    "速読_売上管理表_"),
+    ServiceSpec("programming", "template_based", "プログラミング清算書",     "プログラミング売上管理表_"),
+    ServiceSpec("shogi",       "template_based", "スマイル将棋清算書",       "スマイル将棋売上管理表_"),
+    ServiceSpec("bunri",       "template_based", "文理ヴィクトリー清算書",   "文理ヴィクトリー売上管理表_"),
+    ServiceSpec("sokudoku",    "template_based", "１００万人の速読　清算書", "速読_売上管理表_"),
+    ServiceSpec("eduplus",     "in_place_eduplus"),
 ]
 
 
@@ -123,25 +129,39 @@ def find_source_xlsm(month_date: date) -> tuple[Path, Path]:
 @dataclass
 class Plan:
     service: str
+    kind: str
     source_xlsm: Path
-    template: Path | None  # None = template missing, service will be skipped
-    output: Path
-    month: str  # YYYY-MM
+    template: Path | None  # None for in_place, or when template missing
+    output: Path           # == source_xlsm for in_place
+    month: str             # YYYY-MM
 
 
 def build_plans(month_date: date, source_xlsm: Path) -> list[Plan]:
     plans: list[Plan] = []
     template_month = prev_month(month_date)
+    month_str = f"{month_date.year}-{month_date.month:02d}"
     for spec in SERVICES:
+        if spec.kind == "in_place_eduplus":
+            # Eduplus 処理は源泉 .xlsm そのものを書き換える。
+            plans.append(Plan(
+                service=spec.service,
+                kind=spec.kind,
+                source_xlsm=source_xlsm,
+                template=None,
+                output=source_xlsm,
+                month=month_str,
+            ))
+            continue
         folder = BASE_DIR / spec.folder
         template = find_file(folder, spec.prefix, template_month.year, template_month.month, spec.suffix)
         output = folder / f"{spec.prefix}{month_date.year}{month_date.month:02d}{spec.suffix}"
         plans.append(Plan(
             service=spec.service,
+            kind=spec.kind,
             source_xlsm=source_xlsm,
             template=template,
             output=output,
-            month=f"{month_date.year}-{month_date.month:02d}",
+            month=month_str,
         ))
     return plans
 
@@ -152,8 +172,12 @@ def print_plan(month_date: date, source_folder: Path, source_xlsm: Path, plans: 
     print(f"源泉フォルダ:  {source_folder}")
     print(f"源泉 xlsm:     {source_xlsm.name}")
     print("=" * 80)
-    print("\n生成するファイル:")
+    print("\n処理内容:")
     for p in plans:
+        if p.kind == "in_place_eduplus":
+            print(f"  [{p.service:11s}] 源泉 .xlsm を書き換え (N/O列集計 + 学書マージン + マージン計算用 新規追加)")
+            print(f"  {'':13s}   target: {p.source_xlsm.name}")
+            continue
         if p.template is None:
             print(f"  [{p.service:11s}] テンプレ未検出 → SKIP (前月分ファイルが Y:\\ に無い)")
             continue
@@ -207,6 +231,22 @@ def main() -> int:
     # Execute
     results: list[tuple[str, bool, str]] = []
     for plan in plans:
+        if plan.kind == "in_place_eduplus":
+            print("\n" + "=" * 80)
+            print(f"[{plan.service}] 集計開始...")
+            print("=" * 80)
+            try:
+                edu_result = process_eduplus(plan.source_xlsm, backup=True)
+                print()
+                print(format_eduplus_summary(edu_result))
+                info = (f"新規 {len(edu_result.new_family_ids)}塾" if edu_result.new_family_ids
+                        else "新規追加なし")
+                results.append((plan.service, True, info))
+            except Exception as e:
+                results.append((plan.service, False, f"{type(e).__name__}: {e}"))
+                print(f"\n[{plan.service}] FAILED: {e}", file=sys.stderr)
+            continue
+
         if plan.template is None:
             results.append((plan.service, False, "template missing → SKIP"))
             continue
