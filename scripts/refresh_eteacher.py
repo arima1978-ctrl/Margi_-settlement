@@ -98,17 +98,29 @@ def main() -> int:
             continue
 
         # 売上: 0 の場合は cell を空にする (前の値が残っていると誤解を招く)
+        # number_format を明示的に指定しないと、テンプレの旧書式 (d/m/yyyy
+        # 等の日付書式) が継承されて 1948/7/18 のように表示されてしまう。
+        sales_cell = ws.cell(row=row, column=COL_SALES)
         if shop.sales != 0:
-            ws.cell(row=row, column=COL_SALES).value = shop.sales
+            sales_cell.value = shop.sales
         else:
-            ws.cell(row=row, column=COL_SALES).value = None
+            sales_cell.value = None
             sales_zero += 1
+        sales_cell.number_format = "#,##0"
 
         # 参照列を再書き込み (family_id 基準で確実なデータ)
-        ws.cell(row=row, column=COL_REF_ADDR).value = shop.addr or None
-        ws.cell(row=row, column=COL_REF_TEL).value = shop.tel or None
-        ws.cell(row=row, column=COL_REF_REP).value = shop.rep or None
-        ws.cell(row=row, column=COL_METHOD).value = "id"
+        ref_addr = ws.cell(row=row, column=COL_REF_ADDR)
+        ref_addr.value = shop.addr or None
+        ref_addr.number_format = "@"  # 文字列
+        ref_tel = ws.cell(row=row, column=COL_REF_TEL)
+        ref_tel.value = shop.tel or None
+        ref_tel.number_format = "@"
+        ref_rep = ws.cell(row=row, column=COL_REF_REP)
+        ref_rep.value = shop.rep or None
+        ref_rep.number_format = "@"
+        method_cell = ws.cell(row=row, column=COL_METHOD)
+        method_cell.value = "id"
+        method_cell.number_format = "@"
         written += 1
 
     wb.save(target)

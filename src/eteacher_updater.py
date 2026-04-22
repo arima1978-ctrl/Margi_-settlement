@@ -412,15 +412,29 @@ def update_eteacher(
             continue
 
         if family_id_col is not None:
-            ws.cell(row=row_idx, column=family_id_col).value = shop.family_id
+            fid_cell = ws.cell(row=row_idx, column=family_id_col)
+            fid_cell.value = shop.family_id
+            fid_cell.number_format = "0"
+        sales_cell = ws.cell(row=row_idx, column=new_month_sales_col)
         if shop.sales != 0:
-            ws.cell(row=row_idx, column=new_month_sales_col).value = shop.sales
+            sales_cell.value = shop.sales
+        sales_cell.number_format = "#,##0"
 
-        # Reference info (always populated for matched rows)
-        ws.cell(row=row_idx, column=ref_addr_col).value = shop.addr or None
-        ws.cell(row=row_idx, column=ref_tel_col).value = shop.tel or None
-        ws.cell(row=row_idx, column=ref_rep_col).value = shop.rep or None
-        ws.cell(row=row_idx, column=ref_method_col).value = method
+        # Reference info (always populated for matched rows). Explicitly set
+        # text format so the template's inherited date format doesn't turn
+        # "0265-52-4119" or 住所 into a weird date.
+        ref_addr_cell = ws.cell(row=row_idx, column=ref_addr_col)
+        ref_addr_cell.value = shop.addr or None
+        ref_addr_cell.number_format = "@"
+        ref_tel_cell = ws.cell(row=row_idx, column=ref_tel_col)
+        ref_tel_cell.value = shop.tel or None
+        ref_tel_cell.number_format = "@"
+        ref_rep_cell = ws.cell(row=row_idx, column=ref_rep_col)
+        ref_rep_cell.value = shop.rep or None
+        ref_rep_cell.number_format = "@"
+        method_cell = ws.cell(row=row_idx, column=ref_method_col)
+        method_cell.value = method
+        method_cell.number_format = "@"
 
         matched_family_ids.add(shop.family_id)
         result.matched.append((name, shop.family_id, shop.sales, method))
