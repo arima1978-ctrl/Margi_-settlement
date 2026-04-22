@@ -110,6 +110,7 @@ def run(service: str, source: str, template: str, output: str, month: str,
                     csv_data_start_row=sms["csv_data_start_row"],
                     excel_data_start_row=sms["excel_data_start_row"],
                     excel_max_col_letter=sms.get("excel_max_col_letter", "AG"),
+                    csv_id_column=sms.get("csv_id_column", 2),
                 )
                 print(f"     Wrote {written} shops to '{sms['sheet']}'")
             except Exception as e:

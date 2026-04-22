@@ -33,6 +33,7 @@ def sync_sales_management(
     csv_data_start_row: int,
     excel_data_start_row: int,
     excel_max_col_letter: str = "AG",
+    csv_id_column: int = 2,
 ) -> int:
     """Replace rows in the sales management sheet using CSV data.
 
@@ -43,6 +44,9 @@ def sync_sales_management(
         csv_data_start_row: First CSV row index that contains shop data.
         excel_data_start_row: First Excel row to write.
         excel_max_col_letter: Rightmost column to clear (safety).
+        csv_id_column: CSV column index that holds the 塾ID used to filter out
+            empty rows. Defaults to 2 (programming's layout). Bunri places 塾ID
+            at CSV col 3 because of a spacer column in its master sheet.
 
     Returns:
         Number of rows written.
@@ -61,8 +65,8 @@ def sync_sales_management(
     written = 0
     for csv_row_idx in range(csv_data_start_row, len(csv_rows)):
         csv_row = csv_rows[csv_row_idx]
-        # Skip rows with no 塾ID in the primary ID CSV column (col 2 by convention)
-        if len(csv_row) <= 2 or not csv_row[2].strip():
+        # Skip rows whose 塾ID column is missing or empty
+        if len(csv_row) <= csv_id_column or not csv_row[csv_id_column].strip():
             continue
 
         excel_row = excel_data_start_row + written
