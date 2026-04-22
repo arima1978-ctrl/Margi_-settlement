@@ -27,7 +27,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from src.eteacher_updater import (
     EteacherUpdateResult,
-    compute_sales_by_shop,
+    compute_shops_with_sales,
     convert_xls_to_xlsx,
     format_eteacher_summary,
     update_eteacher,
@@ -117,20 +117,20 @@ def main() -> int:
     print(f"output:    {output_xlsx}")
     print()
 
-    # Step 1: compute sales per shop from processed xlsm
-    print("[1/3] マージン計算用 から 塾別売上を算出中...")
-    sales = compute_sales_by_shop(source_xlsm)
-    print(f"     {len(sales)} 塾の売上データを読み込み")
+    # Step 1: compute sales per shop from processed xlsm (includes TEL/addr)
+    print("[1/3] マージン計算用 から 塾別売上 + 連絡先 を収集中...")
+    shops = compute_shops_with_sales(source_xlsm)
+    print(f"     {len(shops)} 塾を読み込み")
 
     # Step 2: convert .xls template -> .xlsx output (preserving formatting via Excel COM)
     print("[2/3] .xls テンプレを .xlsx に変換中 (Excel COM)...")
     convert_xls_to_xlsx(template_xls, output_xlsx)
 
     # Step 3: insert 家族ID column and write this month's data
-    print("[3/3] 家族ID列挿入 + 売上反映...")
+    print("[3/3] 塾名→TEL→住所 の順で照合、家族ID列挿入+売上反映...")
     result = update_eteacher(
         xlsx_path=output_xlsx,
-        sales=sales,
+        shops=shops,
         insert_family_id_col=not args.no_insert,
     )
     # Keep the original template path for display
