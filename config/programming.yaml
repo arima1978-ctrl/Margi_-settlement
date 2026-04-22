@@ -158,3 +158,15 @@ sales_master_sync:
     47: AE    # サイトＩＤ
     48: AF    # サイトPW
     49: AG    # ID・PWチェック
+
+# プログラミング営業管理 で「追客状況=契約」の塾を報告書に自動追加。
+# sales_master_sync の直後に走り、Google Sheet 側で新しく契約となった塾が
+# 次回実行時に 報告書 B列へ反映される。
+contract_shop_sync:
+  enabled: true
+  sheet: プログラミング営業管理
+  id_column: C           # 塾ID
+  status_column: K       # 追客状況
+  status_value: 契約
+  data_start_row: 3      # r1/r2 はヘッダー、データは r3 から
+  append_to_report: true

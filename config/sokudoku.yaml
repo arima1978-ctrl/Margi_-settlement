@@ -45,3 +45,61 @@ new_shop_detection:
   report_family_id_column: B
   report_data_start_row: 6
   report_al_column: null
+
+# 速読お問い合わせリスト を Google Sheet の CSV から全行置換。
+# bunri と同じレイアウト (0: oka, 3: 塾ID, 11: 追客状況)。
+sales_master_sync:
+  enabled: true
+  sheet: 速読お問い合わせリスト
+
+  csv_url: "https://docs.google.com/spreadsheets/d/1qVt7hlBdPwFUdy9os9H6gr8vD5qCNU3i4OzhU_re5DI/export?format=csv&gid=0"
+
+  csv_id_column: 3         # 塾ID は CSV 4列目 (0-indexed = 3)
+  csv_data_start_row: 1    # CSV ヘッダーは行 0、データは行 1 から
+  excel_data_start_row: 2  # Excel ヘッダーは行 1、データは行 2 から
+  excel_max_col_letter: AG
+
+  # CSV 列 (0-indexed) → Excel 列 (letter)。33列構成で 1:1 に揃う。
+  column_mapping:
+    0: A    # oka (全角空白ヘッダー)
+    1: B    # 問合せ日
+    3: D    # 塾ID
+    4: E    # 塾名
+    5: F    # 代理店
+    6: G    # 営業担当
+    7: H    # 塾担当者名
+    8: I    # 資料発送日
+    9: J    # 塾長体験日
+    10: K   # 会員種別
+    11: L   # 追客状況
+    12: M   # 体験申込日
+    13: N   # 請求開始日
+    14: O   # お試し申込日
+    15: P   # 通年申込日
+    16: Q   # お試し開始日
+    17: R   # 使用開始日
+    18: S   # 解約日
+    19: T   # 削除日
+    20: U   # 備考
+    21: V   # 電話番号
+    22: W   # 住所
+    23: X   # メール
+    24: Y   # 差込 $3（DEKITAログインID）
+    25: Z   # ログインＰＷ
+    26: AA  # 新規メール送信日
+    27: AB  # 教室名
+    28: AC  # 教室名(2教室目)
+    29: AD  # 教室長ＩＤ
+    30: AE  # 教室長PW(初期)
+    31: AF  # 招待メール送信日
+    32: AG  # ﾓﾆﾀｰ終了日
+
+# 速読お問い合わせリスト で「追客状況=契約」の塾を報告書に自動追加。
+contract_shop_sync:
+  enabled: true
+  sheet: 速読お問い合わせリスト
+  id_column: D           # 塾ID
+  status_column: L       # 追客状況
+  status_value: 契約
+  data_start_row: 2      # お問い合わせリストの1行目はヘッダー
+  append_to_report: true
