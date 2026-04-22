@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import calendar
+import os
 import sys
 from dataclasses import dataclass
 from datetime import date
@@ -30,8 +31,16 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from margin_settlement import run as run_service
+from src.notifier import format_run_summary, load_dotenv, send_telegram
 
-BASE_DIR = Path(r"Y:\_★20170701作業用\【エデュプラス請求書】")
+# Load .env early so MARGIN_BASE_DIR is respected when the module-level
+# BASE_DIR constant is resolved.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
+
+# Windows default points to Y:\, Linux deploy overrides via MARGIN_BASE_DIR
+# (e.g. /mnt/nas_share/_★20170701作業用/【エデュプラス請求書】).
+_DEFAULT_BASE = r"Y:\_★20170701作業用\【エデュプラス請求書】"
+BASE_DIR = Path(os.environ.get("MARGIN_BASE_DIR") or _DEFAULT_BASE)
 SOURCE_BACKUP_DIR = BASE_DIR / "【業者請求書】エクセルbackup"
 
 
@@ -162,7 +171,10 @@ def main() -> int:
                         help="指定サービスだけ実行")
     parser.add_argument("--skip-google-sheet", action="store_true",
                         help="Google Sheet 照会をスキップ (programming の新規塾検出)")
+    parser.add_argument("--notify", action="store_true",
+                        help="Telegram に実行結果を通知 (env: TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID)")
     args = parser.parse_args()
+
 
     if args.month:
         month_date = parse_month(args.month)
@@ -225,6 +237,16 @@ def main() -> int:
         mark = "OK " if ok else "NG "
         print(f"  {mark} {svc:11s}  {info}")
     print(f"\n成功 {ok_count}/{len(results)}, 失敗 {fail_count}")
+
+    if args.notify:
+        month_str = f"{month_date.year}-{month_date.month:02d}"
+        summary = format_run_summary(month_str, results)
+        sent = send_telegram(summary)
+        if sent:
+            print("\nTelegram 通知送信しました。")
+        else:
+            print("\nWARN: Telegram 通知送信に失敗しました (認証情報未設定 or ネットワーク障害)。", file=sys.stderr)
+
     return 0 if fail_count == 0 else 1
 
 
