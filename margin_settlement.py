@@ -129,6 +129,14 @@ def run(service: str, source: str, template: str, output: str, month: str,
     update_month_cell(report_ws, cfg["month_cell"], month_date)
     print(f"  {cfg['report_sheet']}!{cfg['month_cell']} = {month_date.date()}")
 
+    # 5b. Apply cell overrides to fix any drifted template formulas (e.g.
+    # bunri's Q3 Feb template had =SUM(L3:P3) which excluded the 初期費用 (K)
+    # column; the correct formula is =SUM(K3:P3)).
+    overrides = cfg.get("report_cell_overrides") or {}
+    for addr, value in overrides.items():
+        report_ws[addr].value = value
+        print(f"  Override {cfg['report_sheet']}!{addr} = {value}")
+
     # 6. New shop detection + manual add
     nsd = cfg.get("new_shop_detection", {})
     # ``report_al_column`` can be set to ``null`` in YAML for reports that do
