@@ -1,6 +1,6 @@
 # eteacher 月次タスクを Windows Task Scheduler に登録 (schtasks.exe 経由)
 #
-# 実行方法: PowerShell を管理者権限で開き、以下を実行
+# 実行方法:
 #   cd C:\Users\USER\projects\Margi_-settlement
 #   .\register_eteacher_task.ps1
 #
@@ -14,23 +14,22 @@ if (-not (Test-Path $BatPath)) {
     exit 1
 }
 
-# 既存タスクがあれば削除
+# 既存タスクを削除 (存在しなければ無視)
 schtasks.exe /Delete /TN $TaskName /F 2>$null | Out-Null
 
-# 毎月 1 日 09:00 実行を登録
-# /SC MONTHLY  : 月次トリガ
-# /D 1         : 毎月 1 日
-# /ST 09:00    : 09:00 開始
-# /RL LIMITED  : 通常権限 (管理者不要のタスク)
-# /F           : 既存があっても強制上書き
-schtasks.exe /Create `
-    /TN $TaskName `
-    /TR "`"$BatPath`"" `
-    /SC MONTHLY `
-    /D 1 `
-    /ST 09:00 `
-    /RL LIMITED `
-    /F
+# 引数を配列で構築し、& で呼び出す (バックチック行継続を避けるため)
+$schtasksArgs = @(
+    "/Create",
+    "/TN", $TaskName,
+    "/TR", "`"$BatPath`"",
+    "/SC", "MONTHLY",
+    "/D",  "1",
+    "/ST", "09:00",
+    "/RL", "LIMITED",
+    "/F"
+)
+
+& schtasks.exe @schtasksArgs
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "schtasks.exe 登録に失敗: ExitCode=$LASTEXITCODE"
