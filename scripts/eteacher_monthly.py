@@ -347,19 +347,24 @@ def main() -> int:
     wb.save(out)
     wb.close()
 
-    # Summary
+    # Summary (Telegram 本文は新規追加塾を中心に)
     summary_lines = [
         f"【eteacher 月次生成】{target.year}年{target.month}月",
-        f"source: {source.name}",
-        f"output: {out.name}",
         f"売上合計: {total:,} 円 ({matched} 塾)",
+        "",
     ]
     if added:
-        summary_lines.append(f"新規追加: {len(added)} 塾")
-        for info in added[:10]:
-            summary_lines.append(f"  - ID={info['family_id']} {info['name']} (売上 {info['sales']:,})")
-        if len(added) > 10:
-            summary_lines.append(f"  ... 他 {len(added) - 10} 塾")
+        summary_lines.append(f"■ 新規追加塾 ({len(added)} 件):")
+        for info in added:
+            name = info["name"] or "(塾名なし)"
+            sales = info["sales"]
+            sales_txt = f"売上 {sales:,} 円" if sales else "売上 0 円"
+            summary_lines.append(f"  ・ID={info['family_id']} {name} ({sales_txt})")
+    else:
+        summary_lines.append("■ 新規追加塾: なし")
+    summary_lines.append("")
+    summary_lines.append(f"source: {source.name}")
+    summary_lines.append(f"output: {out.name}")
     summary = "\n".join(summary_lines)
     print()
     print(summary)
