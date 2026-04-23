@@ -91,10 +91,24 @@ def main() -> int:
             no_fid += 1
             continue
 
+        # D列 = 0 は「明示的に無効化された行」。AO/参照列をクリアして二重計上を防ぐ。
+        if fid == 0:
+            ws.cell(row=row, column=COL_SALES).value = None
+            ws.cell(row=row, column=COL_REF_ADDR).value = None
+            ws.cell(row=row, column=COL_REF_TEL).value = None
+            ws.cell(row=row, column=COL_REF_REP).value = None
+            ws.cell(row=row, column=COL_METHOD).value = None
+            continue
+
         shop = by_fid.get(fid)
         if shop is None:
             no_match += 1
-            # source 側に存在しない家族ID → AO/参照列は触らない (既存値を保持)
+            # source 側に存在しない家族ID → AO/参照列をクリア (二重計上防止)
+            ws.cell(row=row, column=COL_SALES).value = None
+            ws.cell(row=row, column=COL_REF_ADDR).value = None
+            ws.cell(row=row, column=COL_REF_TEL).value = None
+            ws.cell(row=row, column=COL_REF_REP).value = None
+            ws.cell(row=row, column=COL_METHOD).value = None
             continue
 
         # 売上: 0 の場合は cell を空にする (前の値が残っていると誤解を招く)
