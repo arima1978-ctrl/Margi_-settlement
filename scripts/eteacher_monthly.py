@@ -287,22 +287,34 @@ def main() -> int:
     parser.add_argument("--output", help="出力 .xlsx パスを明示")
     parser.add_argument("--notify", action="store_true", help="Telegram 通知")
     parser.add_argument("--no-backup", action="store_true", help=".bak を作らない")
+    parser.add_argument("--preview", action="store_true",
+                        help="当月を対象月として /tmp にプレビュー出力 (本番前の事前確認用)")
     args = parser.parse_args()
 
-    target = _resolve_target_month(args.month)
-    print(f"対象月: {target.year}-{target.month:02d}")
+    if args.preview:
+        today = date.today()
+        target = date(today.year, today.month, 1)
+    else:
+        target = _resolve_target_month(args.month)
+    print(f"対象月: {target.year}-{target.month:02d}{' (プレビュー)' if args.preview else ''}")
 
     try:
         source = Path(args.source) if args.source else find_source_xlsm(target)
         template = Path(args.template) if args.template else find_prev_eteacher(target)
     except FileNotFoundError as exc:
-        msg = f"【eteacher 月次】{target.year}-{target.month:02d} ファイル未検出: {exc}"
+        label = "プレビュー" if args.preview else "月次"
+        msg = f"【eteacher {label}】{target.year}-{target.month:02d} ファイル未検出: {exc}"
         print(msg, file=sys.stderr)
         if args.notify:
             send_telegram(msg)
         return 2
 
-    out = Path(args.output) if args.output else output_path(target)
+    if args.output:
+        out = Path(args.output)
+    elif args.preview:
+        out = Path(f"/tmp/eteacher_preview_{target.year}{target.month:02d}.xlsx")
+    else:
+        out = output_path(target)
     out.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"source:   {source}")
@@ -348,8 +360,9 @@ def main() -> int:
     wb.close()
 
     # Summary (Telegram 本文は新規追加塾を中心に)
+    title_prefix = "【eteacher プレビュー】" if args.preview else "【eteacher 月次生成】"
     summary_lines = [
-        f"【eteacher 月次生成】{target.year}年{target.month}月",
+        f"{title_prefix}{target.year}年{target.month}月",
         f"売上合計: {total:,} 円 ({matched} 塾)",
         "",
     ]
