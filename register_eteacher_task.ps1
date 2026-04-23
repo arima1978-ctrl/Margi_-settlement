@@ -1,4 +1,4 @@
-# eteacher 月次タスクを Windows Task Scheduler に登録
+# eteacher 月次タスクを Windows Task Scheduler に登録 (schtasks.exe 経由)
 #
 # 実行方法: PowerShell を管理者権限で開き、以下を実行
 #   cd C:\Users\USER\projects\Margi_-settlement
@@ -14,35 +14,34 @@ if (-not (Test-Path $BatPath)) {
     exit 1
 }
 
-# 毎月 1 日 09:00 実行トリガ
-$Trigger = New-CimInstance -CimClass (Get-CimClass -ClassName MSFT_TaskMonthlyTrigger -Namespace Root\Microsoft\Windows\TaskScheduler) -ClientOnly
-$Trigger.DaysOfMonth   = 1
-$Trigger.MonthsOfYear  = 4095   # 全月 (ビットマスク: 2^12 - 1)
-$Trigger.StartBoundary = (Get-Date "2026-05-01 09:00:00" -Format "yyyy-MM-ddTHH:mm:ss")
-$Trigger.Enabled       = $true
+# 既存タスクがあれば削除
+schtasks.exe /Delete /TN $TaskName /F 2>$null | Out-Null
 
-$Action    = New-ScheduledTaskAction -Execute $BatPath
-$Principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
-$Settings  = New-ScheduledTaskSettingsSet `
-                -AllowStartIfOnBatteries `
-                -DontStopIfGoingOnBatteries `
-                -StartWhenAvailable `
-                -ExecutionTimeLimit (New-TimeSpan -Hours 2)
+# 毎月 1 日 09:00 実行を登録
+# /SC MONTHLY  : 月次トリガ
+# /D 1         : 毎月 1 日
+# /ST 09:00    : 09:00 開始
+# /RL LIMITED  : 通常権限 (管理者不要のタスク)
+# /F           : 既存があっても強制上書き
+schtasks.exe /Create `
+    /TN $TaskName `
+    /TR "`"$BatPath`"" `
+    /SC MONTHLY `
+    /D 1 `
+    /ST 09:00 `
+    /RL LIMITED `
+    /F
 
-Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-
-Register-ScheduledTask `
-    -TaskName $TaskName `
-    -Action $Action `
-    -Trigger $Trigger `
-    -Principal $Principal `
-    -Settings $Settings `
-    -Description "eteacher 売上管理表 月次自動生成 (毎月1日 09:00)"
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "schtasks.exe 登録に失敗: ExitCode=$LASTEXITCODE"
+    exit 1
+}
 
 Write-Host ""
 Write-Host "登録完了: $TaskName"
-Write-Host "次回実行: 2026-05-01 09:00 (以降 毎月 1 日 09:00)"
+Write-Host "次回実行: 次の月 1 日 09:00 (以降 毎月 1 日 09:00)"
 Write-Host ""
-Write-Host "確認:     Get-ScheduledTask -TaskName $TaskName"
-Write-Host "手動実行: Start-ScheduledTask -TaskName $TaskName"
+Write-Host "確認:     schtasks /Query /TN $TaskName /V /FO LIST"
+Write-Host "手動実行: schtasks /Run /TN $TaskName"
+Write-Host "削除:     schtasks /Delete /TN $TaskName /F"
 Write-Host "ログ:     $PSScriptRoot\logs\eteacher_monthly.log"
